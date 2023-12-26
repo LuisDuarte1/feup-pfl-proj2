@@ -102,6 +102,15 @@ runInst (Store key) (code, (x:xs), state) = case (filter (\(skey, _) -> skey == 
 -- fetch op
 runInst (Fetch key) (code, stack, state) = case (filter (\(skey, _) -> skey == key) state) of [] -> error $ "Run-time error"
                                                                                               ((_, value):_) -> (code, [value] ++ stack,state)
+-- branch op
+runInst (Branch c1 c2) (code, (Boolean a: xs), state)
+  | a == True = (c1 ++ code, xs, state)
+  | a == False = (c2 ++ code, xs, state)
+
+runInst (Branch c1 c2) (code, stack, state) = ([], stack, state) -- according to the spec, it should halt instead of throwing a error?
+
+-- loop op
+runInst (Loop c1 c2) (code, stack, state) = (c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]] ++ code, stack, state)
 
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state) --when there's no code left leave
