@@ -25,9 +25,7 @@ createEmptyStack = []
 
 evaluation2Str :: EvaluationData -> String
 evaluation2Str (Int a) = show a
-evaluation2Str (Boolean True) = "tt"
-evaluation2Str (Boolean False) = "ff"
-
+evaluation2Str (Boolean a) = show a
 
 
 stack2Str :: Stack -> String
@@ -67,6 +65,22 @@ runInst (Push i) (code, stack, state) = (code, (Int i : stack), state)
 runInst Fals (code, stack, state) = (code, (Boolean False: stack), state)
 runInst Tru (code, stack, state) = (code, (Boolean True: stack), state)
 
+-- equal op
+runInst Equ (code, (Int a: Int b: xs), state)
+  | a == b = (code, (Boolean True :xs), state)
+  | a /= b = (code, (Boolean False :xs), state)
+
+runInst Equ (code, (Boolean a: Boolean b: xs), state)
+  | a == b = (code, (Boolean True :xs), state)
+  | a /= b = (code, (Boolean False :xs), state)
+
+runInst Equ (code, stack, state) = error "Run-time error"
+
+-- neg op
+
+runInst Neg (code, (Boolean a : xs), state) = (code, (Boolean (not a): xs), state)
+runInst Neg (code, stack, state) =  error "Run-time error"
+
 
 
 run :: (Code, Stack, State) -> (Code, Stack, State)
@@ -80,7 +94,12 @@ testAssembler code = (stack2Str stack, state2Str state)
 
 -- Examples:
 -- testAssembler [Push 10,Push 4,Add] == ("14","")
---  
+-- testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
+-- testAssembler [Push 10,Push 4,Equ] == ("False","")
+-- testAssembler [Push 10,Push 10,Equ] == ("True","")
+-- testAssembler [Tru, Tru, Equ] == ("True", "")
+-- testAssembler [Fals, Tru, Equ] == ("False", "")
+-- testAssembler [Fals, Neg] == ("True", "")
 -- testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True")
 -- testAssembler [Fals,Store "var",Fetch "var"] == ("False","var=False")
 -- testAssembler [Push (-20),Tru,Fals] == ("False,True,-20","")
