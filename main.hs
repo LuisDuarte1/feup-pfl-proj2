@@ -10,16 +10,23 @@ data Inst =
   deriving Show
 type Code = [Inst]
 
-data EvaluationData = Bool | Num
+data EvaluationData = Boolean Bool | Int Integer
 
 type Stack = [EvaluationData]
 
 
 createEmptyStack :: Stack
-createEmptyStack = [] -- TODO, Uncomment the function signature after defining Stack
+createEmptyStack = []
 
--- stack2Str :: Stack -> String
-stack2Str = undefined -- TODO, Uncomment all the other function type declarations as you implement them
+evaluation2Str :: EvaluationData -> String
+evaluation2Str (Int a) = show a
+evaluation2Str (Boolean a) = show a
+
+
+stack2Str :: Stack -> String
+stack2Str [] = ""
+stack2Str [x] = evaluation2Str x
+stack2Str (x:xs) = evaluation2Str x ++ "," ++ stack2Str xs
 
 -- createEmptyState :: State
 createEmptyState = undefined -- TODO, Uncomment the function signature after defining State
