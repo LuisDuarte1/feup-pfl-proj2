@@ -77,11 +77,23 @@ runInst Equ (code, (Boolean a: Boolean b: xs), state)
 runInst Equ (code, stack, state) = error "Run-time error"
 
 -- neg op
-
 runInst Neg (code, (Boolean a : xs), state) = (code, (Boolean (not a): xs), state)
 runInst Neg (code, stack, state) =  error "Run-time error"
 
+-- le op (int only)
+runInst Le (code, (Int a: Int b: xs), state)
+  | a <= b = (code, (Boolean True :xs), state)
+  | a > b = (code, (Boolean False :xs), state)
 
+runInst Le (code, stack, state) =  error "Run-time error"
+
+
+-- and op
+runInst And (code, (Boolean a: Boolean b: xs), state) = (code, (Boolean (a && b): xs), state)
+runInst And (code, stack, state) =  error "Run-time error"
+
+-- noop
+runInst Noop vm = vm
 
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state) --when there's no code left leave
