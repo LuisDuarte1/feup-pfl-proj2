@@ -49,7 +49,25 @@ state2Str state =  intercalate "," (map (\x -> stateData2Str x) (sortBy stateSor
 
 -- interpreter
 runInst :: Inst -> (Code, Stack, State) -> (Code, Stack, State)
-runInst = undefined
+
+-- add
+runInst Add (code, (Int a: Int b: xs), state) = (code, (Int (a+b):xs), state)
+runInst Add (code, stack, state) = error "Run-time error"
+
+-- sub
+runInst Sub (code, (Int a: Int b: xs), state) = (code, (Int (a-b):xs), state)
+runInst Sub (code, stack, state) = error "Run-time error"
+
+-- mult
+runInst Mult (code, (Int a: Int b: xs), state) = (code, (Int (a*b):xs), state)
+runInst Mult (code, stack, state) = error "Run-time error"
+
+-- push integer, false, true
+runInst (Push i) (code, stack, state) = (code, (Int i : stack), state)
+runInst Fals (code, stack, state) = (code, (Boolean False: stack), state)
+runInst Tru (code, stack, state) = (code, (Boolean True: stack), state)
+
+
 
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state) --when there's no code left leave
@@ -61,7 +79,8 @@ testAssembler code = (stack2Str stack, state2Str state)
   where (_,stack,state) = run(code, createEmptyStack, createEmptyState)
 
 -- Examples:
--- testAssembler [Push 10,Push 4,Push 3,Sub,Mult] == ("-10","")
+-- testAssembler [Push 10,Push 4,Add] == ("14","")
+--  
 -- testAssembler [Fals,Push 3,Tru,Store "var",Store "a", Store "someVar"] == ("","a=3,someVar=False,var=True")
 -- testAssembler [Fals,Store "var",Fetch "var"] == ("False","var=False")
 -- testAssembler [Push (-20),Tru,Fals] == ("False,True,-20","")
@@ -76,7 +95,7 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- If you test:
 -- testAssembler [Tru,Tru,Store "y", Fetch "x",Tru]
 -- You should get an exception with the string: "Run-time error"
-
+-- testAssembler [Tru, Tru, Add] -> ERROR
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
