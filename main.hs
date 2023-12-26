@@ -1,3 +1,4 @@
+import Data.List
 -- PFL 2023/24 - Haskell practical assignment quickstart
 -- Updated on 15/12/2023
 
@@ -11,9 +12,13 @@ data Inst =
 type Code = [Inst]
 
 data EvaluationData = Boolean Bool | Int Integer
+  deriving Show
 
 type Stack = [EvaluationData]
 
+type StateData = (String, EvaluationData)
+
+type State = [StateData]
 
 createEmptyStack :: Stack
 createEmptyStack = []
@@ -28,11 +33,17 @@ stack2Str [] = ""
 stack2Str [x] = evaluation2Str x
 stack2Str (x:xs) = evaluation2Str x ++ "," ++ stack2Str xs
 
--- createEmptyState :: State
-createEmptyState = undefined -- TODO, Uncomment the function signature after defining State
+createEmptyState :: State
+createEmptyState = []
 
--- state2Str :: State -> String
-state2Str = undefined -- TODO
+stateData2Str :: StateData -> String
+stateData2Str (key,value) = key ++ "=" ++ evaluation2Str value
+
+stateSort :: StateData -> StateData -> Ordering
+stateSort (keyA, _) (keyB, _) = compare keyA keyB 
+
+state2Str :: State -> String
+state2Str state =  intercalate "," (map (\x -> stateData2Str x) (sortBy stateSort state))
 
 -- run :: (Code, Stack, State) -> (Code, Stack, State)
 run = undefined -- TODO
