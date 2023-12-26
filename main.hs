@@ -25,7 +25,9 @@ createEmptyStack = []
 
 evaluation2Str :: EvaluationData -> String
 evaluation2Str (Int a) = show a
-evaluation2Str (Boolean a) = show a
+evaluation2Str (Boolean True) = "tt"
+evaluation2Str (Boolean False) = "ff"
+
 
 
 stack2Str :: Stack -> String
@@ -45,8 +47,13 @@ stateSort (keyA, _) (keyB, _) = compare keyA keyB
 state2Str :: State -> String
 state2Str state =  intercalate "," (map (\x -> stateData2Str x) (sortBy stateSort state))
 
--- run :: (Code, Stack, State) -> (Code, Stack, State)
-run = undefined -- TODO
+-- interpreter
+runInst :: Inst -> (Code, Stack, State) -> (Code, Stack, State)
+runInst = undefined
+
+run :: (Code, Stack, State) -> (Code, Stack, State)
+run ([], stack, state) = ([], stack, state) --when there's no code left leave
+run ((x:xs), stack, state) = run(runInst x (xs, stack, state))
 
 -- To help you test your assembler
 testAssembler :: Code -> (String, String)
