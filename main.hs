@@ -50,15 +50,15 @@ runInst :: Inst -> (Code, Stack, State) -> (Code, Stack, State)
 
 -- add
 runInst Add (code, (Int a: Int b: xs), state) = (code, (Int (a+b):xs), state)
-runInst Add (code, stack, state) = error "Run-time error"
+runInst Add (code, stack, state) = error $ "Run-time error"
 
 -- sub
 runInst Sub (code, (Int a: Int b: xs), state) = (code, (Int (a-b):xs), state)
-runInst Sub (code, stack, state) = error "Run-time error"
+runInst Sub (code, stack, state) = error $ "Run-time error"
 
 -- mult
 runInst Mult (code, (Int a: Int b: xs), state) = (code, (Int (a*b):xs), state)
-runInst Mult (code, stack, state) = error "Run-time error"
+runInst Mult (code, stack, state) = error $ "Run-time error"
 
 -- push integer, false, true
 runInst (Push i) (code, stack, state) = (code, (Int i : stack), state)
@@ -74,26 +74,34 @@ runInst Equ (code, (Boolean a: Boolean b: xs), state)
   | a == b = (code, (Boolean True :xs), state)
   | a /= b = (code, (Boolean False :xs), state)
 
-runInst Equ (code, stack, state) = error "Run-time error"
+runInst Equ (code, stack, state) = error $ "Run-time error"
 
 -- neg op
 runInst Neg (code, (Boolean a : xs), state) = (code, (Boolean (not a): xs), state)
-runInst Neg (code, stack, state) =  error "Run-time error"
+runInst Neg (code, stack, state) =  error $ "Run-time error"
 
 -- le op (int only)
 runInst Le (code, (Int a: Int b: xs), state)
   | a <= b = (code, (Boolean True :xs), state)
   | a > b = (code, (Boolean False :xs), state)
 
-runInst Le (code, stack, state) =  error "Run-time error"
+runInst Le (code, stack, state) =  error $ "Run-time error"
 
 
 -- and op
 runInst And (code, (Boolean a: Boolean b: xs), state) = (code, (Boolean (a && b): xs), state)
-runInst And (code, stack, state) =  error "Run-time error"
+runInst And (code, stack, state) =  error $ "Run-time error"
 
 -- noop
 runInst Noop vm = vm
+
+-- store op
+runInst (Store key) (code, (x:xs), state) = case (filter (\(skey, _) -> skey == key) state) of [] -> (code, xs, state ++ [(key, x)])
+                                                                                               (l: _) -> (code, xs, (filter (\(skey, _) -> skey /= key) state) ++ [(key, x)])
+
+-- fetch op
+runInst (Fetch key) (code, stack, state) = case (filter (\(skey, _) -> skey == key) state) of [] -> error $ "Run-time error"
+                                                                                              ((_, value):_) -> (code, [value] ++ stack,state)
 
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state) --when there's no code left leave
