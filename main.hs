@@ -151,7 +151,7 @@ testAssembler code = (stack2Str stack, state2Str state)
 data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
   deriving Show
 
-data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | Bool Bool | VarB String
+data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | AndBool Stm Stm | Bool Bool | VarB String
   deriving Show
 
 data Stm = Aex Aexp | Bexp Bexp
@@ -211,6 +211,7 @@ parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
 parseIntOrVarOrParen (Punctuation '(': restTokens)
   = case (parseAexp restTokens) of 
       Just (expr, (Punctuation ')': restTokens2)) -> Just (expr, restTokens2)
+      Just (expr, restTokens2) -> Nothing -- TODO: add close parenthesis not found return nothing
       Nothing -> Nothing 
 parseIntOrVarOrParen tokens = Nothing
 
@@ -248,9 +249,14 @@ parseAexp tokens = parseSumOrSubOrRest tokens
 parseTvalOrVar :: [Token] -> Maybe (Stm, [Token])
 parseTvalOrVar (TBool a: restTokens) = Just(Bexp (Bool a), restTokens)
 parseTvalOrVar (Identifier a: restTokens) = Just(Bexp (VarB a), restTokens)
+parseTvalOrVar (Punctuation '(': restTokens) =
+  case (parseBexp restTokens) of
+    Just(exp, (Punctuation ')':restTokens1)) -> Just(exp, restTokens1)
+    Just(exp, restTokens) -> Nothing -- missing Close parenthesis
+    Nothing -> Nothing
 parseTvalOrVar tokens = Nothing
 
-
+-- Aexp derived Bexp parsers
 parseLteOrAexp :: [Token] -> Maybe (Stm, [Token])
 parseLteOrAexp tokens =
   case (parseAexp tokens) of
@@ -271,20 +277,58 @@ parseEqIntOrAexp tokens =
 
 parseAexpDerivedBexp :: [Token] -> Maybe (Stm, [Token])
 parseAexpDerivedBexp tokens = 
-  case (parseEqIntOrAexp tokens) of
+  case (parseLteOrAexp tokens) of
     Just(Bexp a, restTokens) -> Just(Bexp a, restTokens)
     otherwise ->
-      case (parseLteOrAexp tokens) of
+      case (parseEqIntOrAexp tokens) of
         Just(Bexp a, restTokens) -> Just(Bexp a, restTokens)
-        otherwise ->
-          case (parseTvalOrVar tokens) of
-            Just (exp, restTokens) -> Just(exp, restTokens)
-            Nothing -> Nothing
+        Just(a,b) -> Nothing -- Aexp or something else inside boolean expression
+        Nothing -> Nothing
+
+-- rest of Bexps
+
+parseBexpTValOrAexpDerivedBexp :: [Token] -> Maybe (Stm, [Token])
+parseBexpTValOrAexpDerivedBexp tokens = 
+  case (parseAexpDerivedBexp tokens) of
+    Just(exp, restTokens) -> Just(exp, restTokens)
+    otherwise -> 
+      case (parseTvalOrVar tokens) of
+        Just(exp1, restTokens1) -> Just(exp1, restTokens1)
+        Nothing -> Nothing
 
 
+-- test: (parseBexpNotOrRest . tokenizer) "not (i == 1)"
+parseBexpNotOrRest :: [Token] -> Maybe (Stm, [Token])
+parseBexpNotOrRest (Keyword "not": restTokens) =
+  case (parseBexpTValOrAexpDerivedBexp restTokens) of
+    Just(exp, restTokens2) -> Just(Bexp (Not exp), restTokens2)
+    Nothing -> Nothing
+parseBexpNotOrRest tokens = parseBexpTValOrAexpDerivedBexp tokens
+
+-- test: (parseBexpEqBoolOrRest . tokenizer) " 2 <= 5 = 3 == 4"
+parseBexpEqBoolOrRest :: [Token] -> Maybe (Stm, [Token])
+parseBexpEqBoolOrRest tokens = 
+  case (parseBexpNotOrRest tokens) of
+    Just(exp1, (Operator "=": restTokens)) ->
+      case(parseBexpEqBoolOrRest restTokens) of 
+        Just (exp2, restTokens2) -> Just (Bexp (EqualsBool exp1 exp2), restTokens2)
+        Nothing -> Nothing
+    Just(a,b) -> Just(a,b)
+    Nothing -> Nothing
+
+-- test: (parseBexpAndOrRest . tokenizer) "not True and 2 <= 5 = 3 == 4"
+parseBexpAndOrRest :: [Token] -> Maybe (Stm, [Token])
+parseBexpAndOrRest tokens = 
+  case (parseBexpEqBoolOrRest tokens) of
+    Just(exp1, (Operator "and": restTokens)) ->
+      case(parseBexpAndOrRest restTokens) of 
+        Just (exp2, restTokens2) -> Just (Bexp (AndBool exp1 exp2), restTokens2)
+        Nothing -> Nothing
+    Just(a,b) -> Just(a,b)
+    Nothing -> Nothing
 
 parseBexp :: [Token] -> Maybe (Stm, [Token])
-parseBexp tokens = undefined
+parseBexp tokens = parseBexpAndOrRest tokens
 
 -- general
 
