@@ -151,7 +151,10 @@ testAssembler code = (stack2Str stack, state2Str state)
 data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
   deriving Show
 
-data Stm = Aex Aexp
+data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | Bool Bool | VarB String
+  deriving Show
+
+data Stm = Aex Aexp | Bexp Bexp
   deriving Show
 
 type Program = [Stm]
@@ -167,7 +170,7 @@ compile = undefined -- TODO
 
 
 --- Tokenizer section
-data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment | Bool Bool
+data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment | TBool Bool
   deriving Show
 
 
@@ -183,8 +186,9 @@ tokenizer (x:xs)
                                                                             "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "True" -> [Bool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "False" -> [Bool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "False" -> [TBool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
   | x `elem` ":" = let (next:rest) = xs
                    in case next of '=' -> [Assignment] ++ tokenizer rest
@@ -205,9 +209,10 @@ parseIntOrVarOrParen :: [Token] -> Maybe (Stm, [Token])
 parseIntOrVarOrParen (Number a: restTokens) = Just (Aex (IntLit a), restTokens)
 parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
 parseIntOrVarOrParen (Punctuation '(': restTokens)
-  = case (parseAexpOrBexp restTokens) of 
+  = case (parseAexp restTokens) of 
       Just (expr, (Punctuation ')': restTokens2)) -> Just (expr, restTokens2)
       Nothing -> Nothing 
+parseIntOrVarOrParen tokens = Nothing
 
 parseProdOrRest :: [Token] -> Maybe (Stm, [Token])
 parseProdOrRest tokens =
@@ -240,13 +245,42 @@ parseAexp tokens = parseSumOrSubOrRest tokens
 
 -- Bexp
 
+parseTvalOrVar :: [Token] -> Maybe (Stm, [Token])
+parseTvalOrVar (TBool a: restTokens) = Just(Bexp (Bool a), restTokens)
+parseTvalOrVar (Identifier a: restTokens) = Just(Bexp (VarB a), restTokens)
 
+parseLteOrAexp :: [Token] -> Maybe (Stm, [Token])
+parseLteOrAexp tokens =
+  case (parseAexp tokens) of
+    Just(exp1, (Operator "<=" : restTokens1)) ->
+      case (parseAexp restTokens1) of
+        Just(exp2, restTokens2) -> Just(Bexp (Lte exp1 exp2), restTokens2)
+        Nothing -> Nothing
+    otherwise -> otherwise
+
+parseEqIntOrAexp :: [Token] -> Maybe (Stm, [Token])
+parseEqIntOrAexp tokens = 
+  case (parseAexp tokens) of
+    Just(exp1, (Operator "==" : restTokens1)) ->
+      case (parseAexp restTokens1) of
+        Just(exp2, restTokens2) -> Just(Bexp (EqualsInt exp1 exp2), restTokens2)
+        Nothing -> Nothing
+    otherwise -> otherwise
+
+
+parseBexp :: [Token] -> Maybe (Stm, [Token])
+parseBexp tokens = undefined
+
+-- general
 
 parseAexpOrBexp :: [Token] -> Maybe (Stm, [Token])
 parseAexpOrBexp tokens = 
   case (parseAexp tokens) of
     Just(expr, restTokens) -> Just (expr, restTokens)
-    Nothing -> Nothing
+    Nothing -> case (parseBexp tokens) of
+      Just(expr, restTokens) -> Just (expr, restTokens)
+      Nothing -> Nothing
+        
                           
 
 -- parse :: String -> Program
