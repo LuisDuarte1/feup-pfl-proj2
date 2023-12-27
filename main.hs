@@ -148,10 +148,10 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
-data Aexp = Plus Aexp Aexp | Minus Aexp Aexp| Multi Aexp Aexp | Integer
+data Aexp = Plus Stm Stm | Minus Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
   deriving Show
 
-data Stm = Aexp
+data Stm = Aex Aexp
   deriving Show
 
 type Program = [Stm]
@@ -165,6 +165,8 @@ compB = undefined -- TODO
 -- compile :: Program -> Code
 compile = undefined -- TODO
 
+
+--- Tokenizer section
 data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment
   deriving Show
 
@@ -188,8 +190,31 @@ tokenizer (x:xs)
   | x `elem` "=" = let (next:rest) = xs
                    in case next of '=' -> [Operator "=="] ++ tokenizer rest
                                    otherwise -> [Operator "="] ++ tokenizer (next:rest)
-  | otherwise = error $ "Could not make a lexical analysis of this input"
+  | otherwise = error $ ("Could not make a lexical analysis of this input" ++ show x)
 
+
+-- Parsing section
+
+-- Aexp
+parseIntOrVarOrParen :: [Token] -> Maybe (Stm, [Token])
+parseIntOrVarOrParen (Number a: restTokens) = Just (Aex (IntLit a), restTokens)
+parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
+parseIntOrVarOrParen (Punctuation '(': restTokens)
+  = case (parseAexpOrBexp restTokens) of 
+      Just (expr, (Punctuation ')': restTokens2)) -> Just (expr, restTokens2)
+      otherwise -> Nothing
+
+parseProdOrRest :: [Token] -> Maybe (Stm, [Token])
+parseProdOrRest tokens =
+  case (parseIntOrVarOrParen tokens) of
+    Just (expr1, (Operator "*": restTokens1)) -> 
+      case (parseIntOrVarOrParen restTokens1) of
+        Just (expr2, restTokens2) -> Just (Aex (Multi expr1 expr2), restTokens2)
+    otherwise -> Nothing
+
+
+parseAexpOrBexp :: [Token] -> Maybe (Stm, [Token])
+parseAexpOrBexp tokens = undefined
 
 -- parse :: String -> Program
 parse = undefined -- TODO
