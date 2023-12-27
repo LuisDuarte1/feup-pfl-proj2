@@ -167,7 +167,7 @@ compile = undefined -- TODO
 
 
 --- Tokenizer section
-data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment
+data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment | Bool Bool
   deriving Show
 
 
@@ -183,6 +183,8 @@ tokenizer (x:xs)
                                                                             "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "True" -> [Bool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "False" -> [Bool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
                                                                             otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
   | x `elem` ":" = let (next:rest) = xs
                    in case next of '=' -> [Assignment] ++ tokenizer rest
@@ -190,6 +192,9 @@ tokenizer (x:xs)
   | x `elem` "=" = let (next:rest) = xs
                    in case next of '=' -> [Operator "=="] ++ tokenizer rest
                                    otherwise -> [Operator "="] ++ tokenizer (next:rest)
+  | x `elem` "<" = let (next:rest) = xs
+                   in case next of '=' -> [Operator "<="] ++ tokenizer rest
+                                   otherwise -> tokenizer (next:rest)
   | otherwise = error $ ("Could not make a lexical analysis of this input" ++ show x)
 
 
@@ -232,6 +237,10 @@ parseSumOrSubOrRest tokens =
 
 parseAexp :: [Token] -> Maybe (Stm, [Token])
 parseAexp tokens = parseSumOrSubOrRest tokens
+
+-- Bexp
+
+
 
 parseAexpOrBexp :: [Token] -> Maybe (Stm, [Token])
 parseAexpOrBexp tokens = 
