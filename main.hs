@@ -248,6 +248,8 @@ parseAexp tokens = parseSumOrSubOrRest tokens
 parseTvalOrVar :: [Token] -> Maybe (Stm, [Token])
 parseTvalOrVar (TBool a: restTokens) = Just(Bexp (Bool a), restTokens)
 parseTvalOrVar (Identifier a: restTokens) = Just(Bexp (VarB a), restTokens)
+parseTvalOrVar tokens = Nothing
+
 
 parseLteOrAexp :: [Token] -> Maybe (Stm, [Token])
 parseLteOrAexp tokens =
@@ -267,6 +269,19 @@ parseEqIntOrAexp tokens =
         Nothing -> Nothing
     otherwise -> otherwise
 
+parseAexpDerivedBexp :: [Token] -> Maybe (Stm, [Token])
+parseAexpDerivedBexp tokens = 
+  case (parseEqIntOrAexp tokens) of
+    Just(Bexp a, restTokens) -> Just(Bexp a, restTokens)
+    otherwise ->
+      case (parseLteOrAexp tokens) of
+        Just(Bexp a, restTokens) -> Just(Bexp a, restTokens)
+        otherwise ->
+          case (parseTvalOrVar tokens) of
+            Just (exp, restTokens) -> Just(exp, restTokens)
+            Nothing -> Nothing
+
+
 
 parseBexp :: [Token] -> Maybe (Stm, [Token])
 parseBexp tokens = undefined
@@ -281,7 +296,7 @@ parseAexpOrBexp tokens =
       Just(expr, restTokens) -> Just (expr, restTokens)
       Nothing -> Nothing
         
-                          
+
 
 -- parse :: String -> Program
 parse = undefined -- TODO
