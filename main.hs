@@ -148,7 +148,7 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
-data Aexp = Plus Stm Stm | Minus Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
+data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
   deriving Show
 
 data Stm = Aex Aexp
@@ -202,7 +202,7 @@ parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
 parseIntOrVarOrParen (Punctuation '(': restTokens)
   = case (parseAexpOrBexp restTokens) of 
       Just (expr, (Punctuation ')': restTokens2)) -> Just (expr, restTokens2)
-      otherwise -> Nothing
+      Nothing -> Nothing 
 
 parseProdOrRest :: [Token] -> Maybe (Stm, [Token])
 parseProdOrRest tokens =
@@ -210,11 +210,35 @@ parseProdOrRest tokens =
     Just (expr1, (Operator "*": restTokens1)) -> 
       case (parseIntOrVarOrParen restTokens1) of
         Just (expr2, restTokens2) -> Just (Aex (Multi expr1 expr2), restTokens2)
-    otherwise -> Nothing
+        Nothing -> Nothing
+    Just (expr1, restTokens1) -> Just (expr1, restTokens1) 
+    Nothing -> Nothing
 
+parseSumOrSubOrRest :: [Token] -> Maybe (Stm, [Token])
+parseSumOrSubOrRest tokens = 
+  case (parseProdOrRest tokens) of
+    Just (expr1, (Operator "+": restTokens1)) -> 
+      case (parseSumOrSubOrRest restTokens1) of
+        Just (expr2, restTokens2) -> Just (Aex (Sum expr1 expr2), restTokens2)
+        Nothing -> Nothing
+  
+    Just (expr1, (Operator "-": restTokens1)) -> 
+      case (parseSumOrSubOrRest restTokens1) of
+        Just (expr2, restTokens2) -> Just (Aex (Subs expr1 expr2), restTokens2)
+        Nothing -> Nothing
+  
+    Just (expr1, restTokens1) -> Just (expr1, restTokens1)
+    Nothing -> Nothing
+
+parseAexp :: [Token] -> Maybe (Stm, [Token])
+parseAexp tokens = parseSumOrSubOrRest tokens
 
 parseAexpOrBexp :: [Token] -> Maybe (Stm, [Token])
-parseAexpOrBexp tokens = undefined
+parseAexpOrBexp tokens = 
+  case (parseAexp tokens) of
+    Just(expr, restTokens) -> Just (expr, restTokens)
+    Nothing -> Nothing
+                          
 
 -- parse :: String -> Program
 parse = undefined -- TODO
