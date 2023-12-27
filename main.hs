@@ -1,4 +1,5 @@
 import Data.List
+import Data.Char
 -- PFL 2023/24 - Haskell practical assignment quickstart
 -- Updated on 15/12/2023
 
@@ -147,6 +148,13 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
+data Aexp = Plus Aexp Aexp | Minus Aexp Aexp| Multi Aexp Aexp | Integer
+  deriving Show
+
+data Stm = Aexp
+  deriving Show
+
+type Program = [Stm]
 
 -- compA :: Aexp -> Code
 compA = undefined -- TODO
@@ -156,6 +164,32 @@ compB = undefined -- TODO
 
 -- compile :: Program -> Code
 compile = undefined -- TODO
+
+data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment
+  deriving Show
+
+
+tokenizer :: String -> [Token]
+tokenizer [] = []
+tokenizer (x:xs)
+  | x `elem` "+-*" = [Operator [x]] ++ tokenizer xs
+  | x `elem` "();" = [Punctuation x] ++ tokenizer xs
+  | x `elem` " " = tokenizer xs
+  | isDigit x = let (num, rest) = span isDigit (x:xs)
+                in [Number (read num :: Integer)] ++ tokenizer rest
+  | isAlpha x = case (takeWhile (\x -> not (x `elem` " +-*();")) (x:xs)) of "while" -> [Keyword "while"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+                                                                            otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+  | x `elem` ":" = let (next:rest) = xs
+                   in case next of '=' -> [Assignment] ++ tokenizer rest
+                                   otherwise -> tokenizer (next:rest)
+  | x `elem` "=" = let (next:rest) = xs
+                   in case next of '=' -> [Operator "=="] ++ tokenizer rest
+                                   otherwise -> [Operator "="] ++ tokenizer (next:rest)
+  | otherwise = error $ "Could not make a lexical analysis of this input"
+
 
 -- parse :: String -> Program
 parse = undefined -- TODO
