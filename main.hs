@@ -264,6 +264,7 @@ tokenizer (x:xs)
 
 -- Aexp
 parseIntOrVarOrParen :: [Token] -> Maybe (Stm, [Token])
+parseIntOrVarOrParen (Operator "-": Number a: restTokens) = Just (Aex (IntLit (-1 * a)), restTokens) -- handle negative constants
 parseIntOrVarOrParen (Number a: restTokens) = Just (Aex (IntLit a), restTokens)
 parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
 parseIntOrVarOrParen (Punctuation '(': restTokens)
