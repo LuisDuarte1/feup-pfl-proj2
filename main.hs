@@ -148,26 +148,80 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- Part 2
 
 -- TODO: Define the types Aexp, Bexp, Stm and Program
-data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String -- the variable has no type
+data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String
   deriving Show
 
 data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | AndBool Stm Stm | Bool Bool | VarB String
   deriving Show
 
--- If consists of the Bexp, the list of statements if it's true and finally the list of statements if it's false
+-- If: consists of the Bexp, the list of statements if it's true and finally the list of statements if it's false
+-- While: consists of the Bexp, and the body
 data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] | While Stm [Stm]
   deriving Show
 
 type Program = [Stm]
 
--- compA :: Aexp -> Code
-compA = undefined -- TODO
+compA :: Aexp -> Code
+compA (IntLit a) = [Push a]
+compA (Var a) = [Fetch a]
 
--- compB :: Bexp -> Code
-compB = undefined -- TODO
+compA (Multi (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Mult]
+compA (Multi a b) = error $ "Supplied a non Aexp statement into a multiplication operation"
 
--- compile :: Program -> Code
-compile = undefined -- TODO
+compA (Subs (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Sub]
+compA (Subs a b) = error $ "Supplied a non Aexp statement into a subtraction operation"
+
+compA (Sum (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Add]
+compA (Sum a b) = error $ "Supplied a non Aexp statement into a addition operation"
+
+
+compB :: Bexp -> Code
+compB (Lte (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Le]
+compB (Lte a b) = error $ "Supplied a non Aexp statement into a integer comparison operation"
+
+compB (EqualsInt (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Equ]
+compB (EqualsInt a b) = error $ "Supplied a non Aexp statement into a integer equality operation"
+
+compB (Not (Bexp a)) = (compB a) ++ [Neg]
+compB (Not a) = error $ "Supplied a non Bexp statement into a not operation"
+
+compB (EqualsBool (Bexp a) (Bexp b)) = (compB b) ++ (compB a) ++ [Equ]
+compB (EqualsBool a b) = error $ "Supplied a non Bexp statement into a bool equality operation"
+
+compB (AndBool (Bexp a) (Bexp b)) = (compB b) ++ (compB a) ++ [And]
+compB (AndBool a b) = error $ "Supplied a non Bexp statement into a bool and operation"
+
+compB (Bool True) = [Tru]
+compB (Bool False) = [Fals]
+compB (VarB a) = [Fetch a]
+
+
+compStm :: Stm -> Code
+compStm (Aex a) = compA a
+compStm (Bexp a) = compB a
+
+-- assignment
+compStm (Assignment name (Aex value)) = (compA value) ++ [Store name]
+compStm (Assignment name (Bexp value)) = (compB value) ++ [Store name] 
+compStm (Assignment name a) = error $ "Supplided a non Aexp/Bexp statement into the store variable operation"
+
+-- if
+compStm (If (Bexp bexp) stmsThen  stmsElse) = (compB bexp) ++ [Branch (compStms stmsThen) (compStms stmsElse)]
+compStm (If a stmsThen  stmsElse) = error $ "Supplided a non Bexp statement into the if operation"
+
+-- while
+compStm (While (Bexp bexp) stmsDo) = [Loop (compB bexp) (compStms stmsDo)]
+compStm (While a stmsDo) = error $ "Supplided a non Bexp statement into the while operation"
+
+
+
+
+compStms :: [Stm] -> Code
+compStms [] = []
+compStms (x:xs) = (compStm x) ++ (compStms xs)
+
+compile :: Program -> Code
+compile prog = compStms prog 
 
 
 --- Tokenizer section
@@ -439,10 +493,9 @@ parse input = case((parseStatements . tokenizer) input) of
   Just(program, []) -> program
   otherwise -> error $ "failed to parse the program..."
 
--- To help you test your parser
--- testParser :: String -> (String, String) 
--- testParser programCode = (stack2Str stack, store2Str store)
---   where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyStore)
+testParser :: String -> (String, String) 
+testParser programCode = (stack2Str stack, state2Str store)
+  where (_,stack,store) = run(compile (parse programCode), createEmptyStack, createEmptyState)
 
 -- Examples:
 -- testParser "x := 5; x := x - 1;" == ("","x=4")
