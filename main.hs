@@ -155,7 +155,7 @@ data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | And
   deriving Show
 
 -- If consists of the Bexp, the list of statements if it's true and finally the list of statements if it's false
-data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] 
+data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] | While Stm [Stm]
   deriving Show
 
 type Program = [Stm]
@@ -188,6 +188,7 @@ tokenizer (x:xs)
     "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
     "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
     "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "do" -> [Keyword "do"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
     "then" -> [Keyword "then"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
     "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
     "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
@@ -342,7 +343,10 @@ parseAexpOrBexp tokens =
     Nothing -> case (parseBexp tokens) of
       Just(expr, restTokens) -> Just (expr, restTokens)
       Nothing -> Nothing
-        
+
+
+-- assignemnt parser
+
 parseAssignment :: [Token] -> Maybe(Stm, [Token])
 parseAssignment (Identifier a: TAssignment : restTokens) = 
   case (parseAexpOrBexp restTokens) of
@@ -350,6 +354,7 @@ parseAssignment (Identifier a: TAssignment : restTokens) =
     Nothing -> Nothing
 parseAssignment tokens = Nothing
 
+-- IF parser
 
 parseElse :: [Token] -> Maybe([Stm], [Token])
 parseElse (Keyword "else": Punctuation '(': restTokens) =
@@ -384,7 +389,20 @@ parseIf (Keyword "if": restTokens) =
     Nothing -> Nothing
 parseIf tokens = Nothing -- if it doesn't match with if
         
+-- parse while
 
+-- NOTE: I still don't know if a while statement can have a do statement without parenthesis
+parseWhile :: [Token] -> Maybe(Stm, [Token])
+parseWhile (Keyword "while": restTokens) =
+  case (parseBexp restTokens) of
+    Just(bexp, (Keyword "do": Punctuation '(': restTokens1)) ->
+      case (parseStatements restTokens1) of
+        Just(expListThen, (Punctuation ')': restTokens2)) -> Just (While bexp expListThen, restTokens2)
+        Just(a,b) -> Nothing -- Didn't close parenthesis
+        Nothing -> Nothing
+    Just(a, b) -> Nothing -- doesn't have do
+    Nothing -> Nothing
+parseWhile tokens = Nothing -- doesn't match while
 
 parseStatement :: [Token] -> Maybe(Stm, [Token])
 parseStatement tokens = 
@@ -392,14 +410,18 @@ parseStatement tokens =
   case(parseIf tokens) of
     Just(stm, restTokens) -> Just(stm, restTokens)
     Nothing ->
-      case(parseAssignment tokens) of
+      case(parseWhile tokens) of
         Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
         Just(a,b) -> Nothing -- missing semi colon
         Nothing -> 
-          case(parseAexpOrBexp tokens) of
+          case(parseAssignment tokens) of
             Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
             Just(a,b) -> Nothing -- missing semi colon
-            Nothing -> Nothing
+            Nothing -> 
+              case(parseAexpOrBexp tokens) of
+                Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
+                Just(a,b) -> Nothing -- missing semi colon
+                Nothing -> Nothing
 
 
 parseStatements :: [Token] -> Maybe([Stm], [Token])
@@ -412,8 +434,10 @@ parseStatements tokens =
         Nothing -> Just([stm], restTokens)
     Nothing -> Nothing
 
--- parse :: String -> Program
-parse = undefined -- TODO
+parse :: String -> Program
+parse input = case((parseStatements . tokenizer) input) of
+  Just(program, []) -> program
+  otherwise -> error $ "failed to parse the program..."
 
 -- To help you test your parser
 -- testParser :: String -> (String, String) 
