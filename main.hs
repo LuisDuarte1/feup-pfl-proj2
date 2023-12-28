@@ -154,7 +154,8 @@ data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var Str
 data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | AndBool Stm Stm | Bool Bool | VarB String
   deriving Show
 
-data Stm = Aex Aexp | Bexp Bexp
+-- If consists of the Bexp, the list of statements if it's true and finally the list of statements if it's false
+data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] 
   deriving Show
 
 type Program = [Stm]
@@ -170,7 +171,7 @@ compile = undefined -- TODO
 
 
 --- Tokenizer section
-data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | Assignment | TBool Bool
+data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | TAssignment | TBool Bool
   deriving Show
 
 
@@ -182,16 +183,18 @@ tokenizer (x:xs)
   | x `elem` " " = tokenizer xs
   | isDigit x = let (num, rest) = span isDigit (x:xs)
                 in [Number (read num :: Integer)] ++ tokenizer rest
-  | isAlpha x = case (takeWhile (\x -> not (x `elem` " +-*();")) (x:xs)) of "while" -> [Keyword "while"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            "False" -> [TBool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
-                                                                            otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=")) (x:xs))
+  | isAlpha x = case (takeWhile (\x -> not (x `elem` " +-*();=:")) (x:xs)) of 
+    "while" -> [Keyword "while"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "then" -> [Keyword "then"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    "False" -> [TBool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+    otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
   | x `elem` ":" = let (next:rest) = xs
-                   in case next of '=' -> [Assignment] ++ tokenizer rest
+                   in case next of '=' -> [TAssignment] ++ tokenizer rest
                                    otherwise -> tokenizer (next:rest)
   | x `elem` "=" = let (next:rest) = xs
                    in case next of '=' -> [Operator "=="] ++ tokenizer rest
@@ -340,7 +343,74 @@ parseAexpOrBexp tokens =
       Just(expr, restTokens) -> Just (expr, restTokens)
       Nothing -> Nothing
         
+parseAssignment :: [Token] -> Maybe(Stm, [Token])
+parseAssignment (Identifier a: TAssignment : restTokens) = 
+  case (parseAexpOrBexp restTokens) of
+    Just(exp, restTokens1) -> Just (Assignment a exp, restTokens1)
+    Nothing -> Nothing
+parseAssignment tokens = Nothing
 
+
+parseElse :: [Token] -> Maybe([Stm], [Token])
+parseElse (Keyword "else": Punctuation '(': restTokens) =
+  case (parseStatements restTokens) of
+        Just(expList, (Punctuation ')': restTokens2)) -> Just(expList, restTokens2)
+        Just(a,b) -> Nothing -- Didn't close parenthesis
+        Nothing -> Nothing
+parseElse (Keyword "else": restTokens) =
+  case (parseStatement restTokens) of
+    Just(exp, restTokens1) -> Just([exp], restTokens1)
+    Nothing -> Nothing
+
+
+parseIf :: [Token] -> Maybe(Stm, [Token])
+parseIf (Keyword "if": restTokens) =
+  case (parseBexp restTokens) of
+    Just(exp, (Keyword "then": Punctuation '(' : restTokens1)) -> 
+      case (parseStatements restTokens1) of
+        Just(expListThen, (Punctuation ')': restTokens2)) -> 
+          case (parseElse restTokens2) of
+            Just(expListElse, restTokens3) -> Just(If exp expListThen expListElse, restTokens3)
+            otherwise -> Nothing
+        Just(a,b) -> Nothing -- Didn't close parenthesis
+        Nothing -> Nothing
+    Just(exp, (Keyword "then": restTokens1)) ->
+      case (parseStatement restTokens1) of
+        Just(expThen, restTokens2) ->
+          case (parseElse restTokens2) of
+            Just(expListElse, restTokens3) -> Just(If exp [expThen] expListElse, restTokens3)
+            otherwise -> Nothing
+        Nothing -> Nothing
+    Nothing -> Nothing
+parseIf tokens = Nothing -- if it doesn't match with if
+        
+
+
+parseStatement :: [Token] -> Maybe(Stm, [Token])
+parseStatement tokens = 
+  -- TODO: add while 
+  case(parseIf tokens) of
+    Just(stm, restTokens) -> Just(stm, restTokens)
+    Nothing ->
+      case(parseAssignment tokens) of
+        Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
+        Just(a,b) -> Nothing -- missing semi colon
+        Nothing -> 
+          case(parseAexpOrBexp tokens) of
+            Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
+            Just(a,b) -> Nothing -- missing semi colon
+            Nothing -> Nothing
+
+
+parseStatements :: [Token] -> Maybe([Stm], [Token])
+parseStatements [] = Nothing
+parseStatements tokens = 
+  case (parseStatement tokens) of
+    Just(stm, restTokens) -> 
+      case (parseStatements restTokens) of
+        Just(stms, restTokens2) -> Just([stm] ++ stms, restTokens2)
+        Nothing -> Just([stm], restTokens)
+    Nothing -> Nothing
 
 -- parse :: String -> Program
 parse = undefined -- TODO
