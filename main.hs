@@ -264,7 +264,7 @@ tokenizer (x:xs)
 
 -- Aexp
 parseIntOrVarOrParen :: [Token] -> Maybe (Stm, [Token])
-parseIntOrVarOrParen (Operator "-": Number a: restTokens) = Just (Aex (IntLit (-1 * a)), restTokens) -- handle negative constants
+parseIntOrVarOrParen (Operator "-": Number a: restTokens) = Just (Aex (IntLit (-1 * a)), restTokens) -- handle negative
 parseIntOrVarOrParen (Number a: restTokens) = Just (Aex (IntLit a), restTokens)
 parseIntOrVarOrParen (Identifier a: restTokens) = Just (Aex (Var a), restTokens)
 parseIntOrVarOrParen (Punctuation '(': restTokens)
@@ -273,6 +273,10 @@ parseIntOrVarOrParen (Punctuation '(': restTokens)
       Just (expr, restTokens2) -> Nothing -- TODO: add close parenthesis not found return nothing
       Nothing -> Nothing 
 parseIntOrVarOrParen tokens = Nothing
+
+-- AFAIK multiplication can be right associative (in this case) because there isn't anything with the same "priority"
+--  In case that we want to implement division we need to change the logic of prod to be as the logic
+--  Of addition and subtraction 
 
 parseProdOrRest :: [Token] -> Maybe (Stm, [Token])
 parseProdOrRest tokens =
@@ -284,17 +288,37 @@ parseProdOrRest tokens =
     Just (expr1, restTokens1) -> Just (expr1, restTokens1) 
     Nothing -> Nothing
 
+
+-- Because Addition and Subtraction must be left associative, therefore we can't just make "left recursion to parse it".
+-- Instead of parsing the first expression, matching the operator and recur on the rest of the tokens, we match the first
+--  and second expressions (with the operator on the middle ofc), and then we try to group it if there's still operators
+--  of the same precedence to the right and recur on it. For example: 1+2+3+4+5 = (((1+2)+3)+4)+5 instead of  1+(2+(3+(4+5))),
+--  which only makes a difference on subtraction eg: (-1)-(-1)-1 which depending of using left or right association can give 
+--  -1 or 1 as a result, respectively.
+
+parseSumOrSubOrRestHelper :: Aexp -> [Token] -> Maybe(Stm, [Token])
+parseSumOrSubOrRestHelper currAexp (Operator "+": tokens) =
+  case(parseProdOrRest tokens) of
+    Just (expr1, restTokens1) -> parseSumOrSubOrRestHelper (Sum (Aex currAexp) expr1) restTokens1
+    Nothing -> Nothing -- couldn't find nothing after a plus means that it probably is an error
+parseSumOrSubOrRestHelper currAexp (Operator "-": tokens) =
+  case(parseProdOrRest tokens) of
+    Just (expr1, restTokens1) -> parseSumOrSubOrRestHelper (Subs (Aex currAexp) expr1) restTokens1
+    Nothing -> Nothing -- couldn't find nothing after a minus means that it probably is an error
+parseSumOrSubOrRestHelper currAexp tokens = Just(Aex currAexp, tokens)
+
+
 parseSumOrSubOrRest :: [Token] -> Maybe (Stm, [Token])
 parseSumOrSubOrRest tokens = 
   case (parseProdOrRest tokens) of
     Just (expr1, (Operator "+": restTokens1)) -> 
-      case (parseSumOrSubOrRest restTokens1) of
-        Just (expr2, restTokens2) -> Just (Aex (Sum expr1 expr2), restTokens2)
+      case (parseProdOrRest restTokens1) of
+        Just (expr2, restTokens2) -> parseSumOrSubOrRestHelper (Sum expr1 expr2) restTokens2
         Nothing -> Nothing
   
     Just (expr1, (Operator "-": restTokens1)) -> 
-      case (parseSumOrSubOrRest restTokens1) of
-        Just (expr2, restTokens2) -> Just (Aex (Subs expr1 expr2), restTokens2)
+      case (parseProdOrRest restTokens1) of
+        Just (expr2, restTokens2) -> parseSumOrSubOrRestHelper (Subs expr1 expr2) restTokens2
         Nothing -> Nothing
   
     Just (expr1, restTokens1) -> Just (expr1, restTokens1)
