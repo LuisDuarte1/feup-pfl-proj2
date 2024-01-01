@@ -1,7 +1,7 @@
 import Data.List
 import Data.Char
 -- PFL 2023/24 - Haskell practical assignment quickstart
--- Updated on 15/12/2023
+-- Updated on 27/12/2023
 
 -- Part 1
 
@@ -12,11 +12,21 @@ data Inst =
   deriving Show
 type Code = [Inst]
 
+-- The Stack can contain both boolean or integer types and because we need to differenciate between them 
+--  (some instructions require for the arguments to be either integer or boolean). Therefore we leverage
+--  the data declarations to do it.
+
 data EvaluationData = Boolean Bool | Int Integer
   deriving Show
 
+
+-- We implement the stack as a list, while we could abstract the list to guarantee that devs use the stack as intended, 
+--  it's simpler to implement this as a list. And guarantee the stack behaviour by ourselves.
 type Stack = [EvaluationData]
 
+-- The state map, again, could be implemented using the standard Data.Map module, but we implement it as a list and 
+--  make the behaviour the same as a Map (except of course, the time complexity which is O(n) instead of O(log n)
+--  but it's an unnecessary optimization for now).
 type StateData = (String, EvaluationData)
 
 type State = [StateData]
@@ -40,6 +50,7 @@ createEmptyState = []
 stateData2Str :: StateData -> String
 stateData2Str (key,value) = key ++ "=" ++ evaluation2Str value
 
+-- Before converting the state list into a string, we have to first order it alphabetically as required per the spec.
 stateSort :: StateData -> StateData -> Ordering
 stateSort (keyA, _) (keyB, _) = compare keyA keyB 
 
@@ -47,6 +58,8 @@ state2Str :: State -> String
 state2Str state =  intercalate "," (map (\x -> stateData2Str x) (sortBy stateSort state))
 
 -- interpreter
+-- We leverage the power of pattern matching to guarantee that the instruction has the required arguments. And throw
+--  and error if it's on a invalid configuration.
 runInst :: Inst -> (Code, Stack, State) -> (Code, Stack, State)
 
 -- add
@@ -97,10 +110,12 @@ runInst And (code, stack, state) =  error $ "Run-time error"
 runInst Noop vm = vm
 
 -- store op
+--  because we don't use maps, we have to find if the the key already exists and override it, otherwise we just append it.
 runInst (Store key) (code, (x:xs), state) = case (filter (\(skey, _) -> skey == key) state) of [] -> (code, xs, state ++ [(key, x)])
                                                                                                (l: _) -> (code, xs, (filter (\(skey, _) -> skey /= key) state) ++ [(key, x)])
 
 -- fetch op
+--  because we don't use maps, we have to filter the whole list to find the corresponding variable.
 runInst (Fetch key) (code, stack, state) = case (filter (\(skey, _) -> skey == key) state) of [] -> error $ "Run-time error"
                                                                                               ((_, value):_) -> (code, [value] ++ stack,state)
 -- branch op
@@ -113,6 +128,8 @@ runInst (Branch c1 c2) (code, stack, state) = ([], stack, state) -- according to
 -- loop op
 runInst (Loop c1 c2) (code, stack, state) = (c1 ++ [Branch (c2 ++ [Loop c1 c2]) [Noop]] ++ code, stack, state)
 
+-- in the run function we pop the current instruction and give the rest to the runInst function, while there are still
+--  instructions left.
 run :: (Code, Stack, State) -> (Code, Stack, State)
 run ([], stack, state) = ([], stack, state) --when there's no code left leave
 run ((x:xs), stack, state) = run(runInst x (xs, stack, state))
@@ -147,13 +164,22 @@ testAssembler code = (stack2Str stack, state2Str state)
 -- testAssembler [Tru, Tru, Add] -> ERROR
 -- Part 2
 
--- TODO: Define the types Aexp, Bexp, Stm and Program
+
+-- An Aexp represents an arithmetric expression, that can have integer or variables as leaf elements.
+--  To simplify the logic of the parser, the operations have the Stm data type instead of Aexp. However,
+--  They only support having other Aexps as a child (this is guareented by the compiler functions.) 
 data Aexp = Sum Stm Stm | Subs Stm Stm| Multi Stm Stm | IntLit Integer | Var String
   deriving Show
 
+-- A Bexp represents a boolean operation. The operations Lte and EqualsInt support only Aexps as child elements.
+--  The rest only support Bexps as child elements. This is guaranteed by the compiller.compA
+--  We also "duplicate" the variable because it can be applied in shorthands like: if (x) then y:=1; else y:=2;
+--  We also support the boolean literals here.
 data Bexp = Lte Stm Stm | EqualsInt Stm Stm | Not Stm | EqualsBool Stm Stm | AndBool Stm Stm | Bool Bool | VarB String
   deriving Show
 
+-- We also support having the raw Aexps or Bexps because the spec isn't explicit about it.
+-- Assignment: consists of the variable name and a Bexp or a Aexp
 -- If: consists of the Bexp, the list of statements if it's true and finally the list of statements if it's false
 -- While: consists of the Bexp, and the body
 data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] | While Stm [Stm]
@@ -161,6 +187,9 @@ data Stm = Aex Aexp | Bexp Bexp | Assignment String Stm | If Stm [Stm] [Stm] | W
 
 type Program = [Stm]
 
+-- The compiler functions check if the arguments correspond either the correct statement type (Stm).
+-- If we think the Aexp as the tree, it will compile first the right side and then it compiles the left side, because of non
+-- commutative operations (eg.: subtraction)
 compA :: Aexp -> Code
 compA (IntLit a) = [Push a]
 compA (Var a) = [Fetch a]
@@ -174,7 +203,8 @@ compA (Subs a b) = error $ "Supplied a non Aexp statement into a subtraction ope
 compA (Sum (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Add]
 compA (Sum a b) = error $ "Supplied a non Aexp statement into a addition operation"
 
-
+-- If we think the Bexp as the tree, it will compile first the right side and then it compiles the left side. Because of non
+-- commutative operations (eg.: Lte)
 compB :: Bexp -> Code
 compB (Lte (Aex a) (Aex b)) = (compA b) ++ (compA a) ++ [Le]
 compB (Lte a b) = error $ "Supplied a non Aexp statement into a integer comparison operation"
@@ -195,7 +225,7 @@ compB (Bool True) = [Tru]
 compB (Bool False) = [Fals]
 compB (VarB a) = [Fetch a]
 
-
+-- compStm generalizes Aexps and Bexps to a unique function to agreggate to the orther three types of Stms.
 compStm :: Stm -> Code
 compStm (Aex a) = compA a
 compStm (Bexp a) = compB a
@@ -215,7 +245,7 @@ compStm (While a stmsDo) = error $ "Supplided a non Bexp statement into the whil
 
 
 
-
+-- we loop through all Stm trees until there's none left, and append the output code to the final program.
 compStms :: [Stm] -> Code
 compStms [] = []
 compStms (x:xs) = (compStm x) ++ (compStms xs)
@@ -224,10 +254,17 @@ compile :: Program -> Code
 compile prog = compStms prog 
 
 
---- Tokenizer section
+-- Tokenizer section
+-- The tokenizer is reponsible for spliting the input program (which is a string) to lexical tokens that belong to a number of categories
+--  to be passed to the other steps of the parser. Simplifying then, the logic of the parser itself.
+-- We have 7 types of tokens: Punctuation represents the delimeters of the language "();", Number represents all number literals,
+--  the identifier represents every word that isn't a keyword (there are no sting support in this language so we don't have to worry about that),
+--  the operators, the keywords (which are strings that are reserved for the language itself, eg.: while, if, else, not...),
+--  the assignment "operator" and the Boolean literal.
 data Token = Punctuation Char | Number Integer | Identifier String | Operator String | Keyword String | TAssignment | TBool Bool
   deriving Show
 
+delims = " +-*();=:"
 
 tokenizer :: String -> [Token]
 tokenizer [] = []
@@ -237,17 +274,17 @@ tokenizer (x:xs)
   | x `elem` " " = tokenizer xs
   | isDigit x = let (num, rest) = span isDigit (x:xs)
                 in [Number (read num :: Integer)] ++ tokenizer rest
-  | isAlpha x = case (takeWhile (\x -> not (x `elem` " +-*();=:")) (x:xs)) of 
-    "while" -> [Keyword "while"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "do" -> [Keyword "do"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "then" -> [Keyword "then"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    "False" -> [TBool False] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
-    otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` " +-*();=:")) (x:xs))
+  | isAlpha x = case (takeWhile (\x -> not (x `elem` delims)) (x:xs)) of 
+    "while" -> [Keyword "while"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "if" -> [Keyword "if"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "else" -> [Keyword "else"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "not" -> [Keyword "not"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "do" -> [Keyword "do"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "then" -> [Keyword "then"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "and" -> [Operator "and"] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "True" -> [TBool True] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    "False" -> [TBool False] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
+    otherwise -> [Identifier otherwise] ++ tokenizer (dropWhile(\x -> not (x `elem` delims)) (x:xs))
   | x `elem` ":" = let (next:rest) = xs
                    in case next of '=' -> [TAssignment] ++ tokenizer rest
                                    otherwise -> tokenizer (next:rest)
@@ -263,6 +300,13 @@ tokenizer (x:xs)
 -- Parsing section
 
 -- Aexp
+-- In other to parse an arithmetric expression, we need to consider the levels of precedence of all operations:
+--    An expression surrounded by parenthesis, a variable or a number literal have the higher level of precedence and
+--     have to processed first. If it's a expression surrounded by parenthesis, we call the parser of the lowest level
+--     of precence to parse the rest of the expression;
+--    Next, we have multiplication;
+--    And finally, we have addition and subtraction (which is implemented differently as you can see below why).
+
 parseIntOrVarOrParen :: [Token] -> Maybe (Stm, [Token])
 parseIntOrVarOrParen (Operator "-": Number a: restTokens) = Just (Aex (IntLit (-1 * a)), restTokens) -- handle negative
 parseIntOrVarOrParen (Number a: restTokens) = Just (Aex (IntLit a), restTokens)
@@ -324,11 +368,17 @@ parseSumOrSubOrRest tokens =
     Just (expr1, restTokens1) -> Just (expr1, restTokens1)
     Nothing -> Nothing
 
+-- Just a wrapper to simplify the naming of functions further on.
 parseAexp :: [Token] -> Maybe (Stm, [Token])
 parseAexp tokens = parseSumOrSubOrRest tokens
 
 -- Bexp
-
+-- On boolean expressions, we have the following levels of precedence, on decending order:
+--      - Lte, EqInt, Boolean literals or exp with parenthesis; (Lte is parsed first then EqInt) 
+--        (and they are parsed first then Bool lits or exp with parenthesis).
+--      - not
+--      - EqBool
+--      - And
 parseTvalOrVar :: [Token] -> Maybe (Stm, [Token])
 parseTvalOrVar (TBool a: restTokens) = Just(Bexp (Bool a), restTokens)
 parseTvalOrVar (Identifier a: restTokens) = Just(Bexp (VarB a), restTokens)
@@ -414,7 +464,7 @@ parseBexp :: [Token] -> Maybe (Stm, [Token])
 parseBexp tokens = parseBexpAndOrRest tokens
 
 -- general
-
+-- A wrapper that tries to parse a Aexp first and if it does not suceed, tries to parse a Bexp. Useful for Assignment operations.
 parseAexpOrBexp :: [Token] -> Maybe (Stm, [Token])
 parseAexpOrBexp tokens = 
   case (parseAexp tokens) of
@@ -434,7 +484,9 @@ parseAssignment (Identifier a: TAssignment : restTokens) =
 parseAssignment tokens = Nothing
 
 -- IF parser
-
+-- On the if parser, we have to handle the parenthesis because we can have multiple statements inside a if/else body but
+--  we can also have only one statement that doesn't require parenthesis.
+-- We parse the else seperately to make the if parser function smaller. 
 parseElse :: [Token] -> Maybe([Stm], [Token])
 parseElse (Keyword "else": Punctuation '(': restTokens) =
   case (parseStatements restTokens) of
@@ -469,8 +521,7 @@ parseIf (Keyword "if": restTokens) =
 parseIf tokens = Nothing -- if it doesn't match with if
         
 -- parse while
-
--- NOTE: I still don't know if a while statement can have a do statement without parenthesis
+-- While statements must always have parenthesis on the body so it's easier to handle compared to the if statements.
 parseWhile :: [Token] -> Maybe(Stm, [Token])
 parseWhile (Keyword "while": restTokens) =
   case (parseBexp restTokens) of
@@ -483,12 +534,15 @@ parseWhile (Keyword "while": restTokens) =
     Nothing -> Nothing
 parseWhile tokens = Nothing -- doesn't match while
 
+
+-- On parseStatement we combine all parsers and try to consume the semicolon delimiter (if applicable).
+-- The combination of parsers uses backtracking (if a parser fails, it backtracks and tries the next one until it succeeds or fails all parsers)
+-- which might not be the most efficient way to parse this language but the performance is good enough.
 parseStatement :: [Token] -> Maybe(Stm, [Token])
 parseStatement tokens = 
-  -- TODO: add while 
   case(parseIf tokens) of
     Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
-    Just(stm, restTokens) -> Just(stm, restTokens)
+    Just(stm, restTokens) -> Just(stm, restTokens) -- Depending on the if else body, it can not require the semicolon delimeter.
     Nothing ->
       case(parseWhile tokens) of
         Just(stm, (Punctuation ';': restTokens)) -> Just(stm, restTokens)
@@ -503,7 +557,8 @@ parseStatement tokens =
                 Just(a,b) -> Nothing -- missing semi colon
                 Nothing -> Nothing
 
-
+-- we try to parse the list of tokens until the the list is empty or it cannot parse the rest of the token list
+--  (useful for the statements inside of if and while statements.)
 parseStatements :: [Token] -> Maybe([Stm], [Token])
 parseStatements [] = Nothing
 parseStatements tokens = 
@@ -514,6 +569,8 @@ parseStatements tokens =
         Nothing -> Just([stm], restTokens)
     Nothing -> Nothing
 
+-- we combine the tokenizer and the parseStatements to generate the program however, we throw if there are
+--  tokens left (which means the input is not a valid program in this language.)
 parse :: String -> Program
 parse input = case((parseStatements . tokenizer) input) of
   Just(program, []) -> program
